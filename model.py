@@ -6,6 +6,7 @@ from typing import Protocol
 
 import gymnasium as gym
 import numpy as np
+import pygame
 import torch
 from torch import nn
 
@@ -166,7 +167,10 @@ def main(*, arguments: list[str]) -> int:
                 input_size=env.observation_space.shape[0],
                 output_size=env.action_space.n,
             )
-            play_episodes(env=env, agent=agent, n_episodes=parsed.n_episodes)
+            try:
+                play_episodes(env=env, agent=agent, n_episodes=parsed.n_episodes)
+            except pygame.error as error:
+                raise ModelError(f"cannot open the display window: {error}") from None
         finally:
             env.close()
     except ModelError as error:

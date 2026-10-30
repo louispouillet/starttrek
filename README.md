@@ -11,13 +11,14 @@ Two reinforcement learning agents learn to land the lunar module of Gymnasium's 
 | `dqn_lunarlander.pt` | the saved DQN model |
 | `ppo_lunarlander.pt` | the saved PPO model |
 | `model.py` | loads a saved model and shows it playing in a window |
+| `DQN.md` | a short summary of the DQN agent and its results |
 | `PPO.md` | a short summary of the PPO agent and its results |
 | `requirements.txt` | the pinned dependencies |
 | `StartTrek.pdf` | the subject |
 
 ## Installation
 
-Python 3.12 is used.
+Python 3.14 is used.
 
 ```bash
 python3 -m venv venv
@@ -75,4 +76,4 @@ Evaluation over 100 consecutive episodes without exploration.
 | PPO | 262.2 ± 46.7 | 92 | 254.3 ± 13.9 | yes |
 | DQN | 246.8 ± 53.4 | 94 | 251.0 ± 9.6 | yes |
 
-Both agents solve the environment at the same level. DQN learns in fewer episodes and in less time, PPO has the higher typical score. Details: `ppo.ipynb` (section 10 for the comparison) and `PPO.md` for PPO, `dqn.ipynb` for DQN.
+Both agents solve the environment at the same level. DQN learns in fewer episodes and in less time, PPO has the higher typical score. Details: `ppo.ipynb` (section 10 for the comparison) and `PPO.md` for PPO, `dqn.ipynb` and `DQN.md` for DQN.
