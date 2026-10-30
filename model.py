@@ -17,6 +17,7 @@ MIN_ARGUMENTS = 2
 MAX_ARGUMENTS = 3
 DEFAULT_EPISODES = 1
 SUPPORTED_ALGORITHMS = ("dqn", "ppo")
+DQN_STATE_PREFIX = "network."
 USAGE = """USAGE
     python model.py ALGO MODEL [EPISODES]
 
@@ -75,27 +76,34 @@ def make_greedy_agent(*, network: nn.Module) -> Agent:
     return greedy_agent
 
 
-def build_ppo_actor(*, input_size: int, hidden_size: int, output_size: int) -> nn.Sequential:
+def build_mlp(*, input_size: int, hidden_size: int, output_size: int, activation: type[nn.Module]) -> nn.Sequential:
     return nn.Sequential(
         nn.Linear(input_size, hidden_size),
-        nn.Tanh(),
+        activation(),
         nn.Linear(hidden_size, hidden_size),
-        nn.Tanh(),
+        activation(),
         nn.Linear(hidden_size, output_size),
     )
 
 
-def load_ppo_agent(*, path: Path, input_size: int, output_size: int) -> Agent:
+def read_checkpoint(*, path: Path) -> object:
     try:
-        checkpoint = torch.load(path, weights_only=True)
+        return torch.load(path, weights_only=True)
     except Exception:
         raise ModelError(f"cannot read '{path}' as a PyTorch model file") from None
+
+
+def load_ppo_agent(*, path: Path, input_size: int, output_size: int) -> Agent:
+    checkpoint = read_checkpoint(path=path)
     if not isinstance(checkpoint, dict) or checkpoint.get("algorithm") != "ppo":
         raise ModelError(f"'{path}' is not a ppo model")
 
     try:
-        actor = build_ppo_actor(
-            input_size=input_size, hidden_size=checkpoint["config"]["hidden_size"], output_size=output_size
+        actor = build_mlp(
+            input_size=input_size,
+            hidden_size=checkpoint["config"]["hidden_size"],
+            output_size=output_size,
+            activation=nn.Tanh,
         )
         actor.load_state_dict(checkpoint["actor"])
     except (KeyError, TypeError, RuntimeError) as error:
@@ -104,7 +112,30 @@ def load_ppo_agent(*, path: Path, input_size: int, output_size: int) -> Agent:
     return make_greedy_agent(network=actor)
 
 
+def load_dqn_agent(*, path: Path, input_size: int, output_size: int) -> Agent:
+    state_dict = read_checkpoint(path=path)
+    if not isinstance(state_dict, dict) or not all(
+        isinstance(name, str) and name.startswith(DQN_STATE_PREFIX) for name in state_dict
+    ):
+        raise ModelError(f"'{path}' is not a dqn model")
+
+    weights = {name.removeprefix(DQN_STATE_PREFIX): tensor for name, tensor in state_dict.items()}
+    try:
+        network = build_mlp(
+            input_size=input_size,
+            hidden_size=weights["0.weight"].shape[0],
+            output_size=output_size,
+            activation=nn.ReLU,
+        )
+        network.load_state_dict(weights)
+    except (KeyError, AttributeError, IndexError, RuntimeError) as error:
+        raise ModelError(f"'{path}' does not contain a valid dqn network: {error}") from None
+    network.eval()
+    return make_greedy_agent(network=network)
+
+
 AGENT_LOADERS: dict[str, Callable[..., Agent]] = {
+    "dqn": load_dqn_agent,
     "ppo": load_ppo_agent,
 }
 
@@ -128,13 +159,9 @@ def main(*, arguments: list[str]) -> int:
 
     try:
         parsed = parse_arguments(arguments=arguments)
-        load_agent = AGENT_LOADERS.get(parsed.algorithm)
-        if load_agent is None:
-            raise ModelError(f"{parsed.algorithm} models are not supported yet")
-
         env = gym.make(ENV_ID, render_mode="human")
         try:
-            agent = load_agent(
+            agent = AGENT_LOADERS[parsed.algorithm](
                 path=parsed.model_path,
                 input_size=env.observation_space.shape[0],
                 output_size=env.action_space.n,
